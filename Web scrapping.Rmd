@@ -1,0 +1,442 @@
+---
+title: | 
+    | PPOL670 | Assignment 04
+    | Text-as-Data
+author: "Wen Pan (wp252)"
+output: pdf_document
+fontsize: 12pt
+---
+
+# General Instructions
+
+The following assignment requests that you leverage everything you've learned up to this point to with regard to data manipulation and text-as-data to perform the following task. 
+
+Guidelines you **must** follow:
+
+1. Use the `tidyverse` whenever possible. There may be instances where you'll have to leave the tidyverse suite of packages. That's okay, but when you can, you _must_ use the `tidyverse` and the pipe. Failure to do so will result in downgrading. 
+
+2. Use `ggplot2` for all visualizations. Figures/plots must be publishable quality (i.e. something you'd see on the News or in publication). Every visualization must contain a title, subtitle, and caption describing the plot. Think carefully about color scheme, plot choice, and plotting components: the aim is to precisely convey a relationship in the data. When you print off the rendered document, make sure to print in color if your figure has color in it, else thoughtfully use grayscale. 
+
+3. Compile your results in a Rmarkdown document. Work should be completely reproducible (i.e. the professor or TA should be able to knit the document on their local computer without issue). Please comment extensively and write a narrative regarding what you are doing in your analysis. The document should read as like a short report. Please regularly print the data objects so it is clear what the object output is. **All submitted results should be rendered and submitted as a `.pdf`**. 
+
+
+```{r,include=F}
+# DON'T DELETE THIS CHUNK
+knitr::opts_chunk$set(warning=F,error = F,message = F,cache=T)
+require(tidyverse)
+require(tidytext)
+require(topicmodels)
+require(rvest)
+require(lubridate)
+```
+
+
+# Task
+
+Please use the text mining toolkit covered in class and in the reading to perform the following task. 
+
+1. Scrape 10 to 25 _related_ news articles from at least 3 different news websites/outlets. Please extract the following meta-data: (1) the news story's "headline", (2) the date of the article, (3) the complete article text, and (4) the website's source (i.e. the name of the news source). 
+
+    - For example, scraping news content about the Khashoggi killing as reported by different news outlets would suffice for this exercise. The aim is to capture the same concept/material being reported by different news outlets.
+    
+    - In your notebook, please comment on why you extracted the content that you did. 
+
+
+The content I am about to extract is about the China-US trade war. The reason that I choose this topic is that #1 This has been a hot tpic recently. #2 Since the trade war is still going on right now, I want to see what is the general sentiment of this topic from different new sources, and also about the most central stuff they talk about in the news (from the frequency of key words).
+   
+First, we will extract 4 news in BBC new website about US-China trade war.
+
+```{r}
+#build the bbc scrapper
+bbc_scraper <- function(url){
+  # Download website   
+  site1 = read_html(url)
+  
+  # Extract headline
+  headline = site1 %>%
+    html_node(xpath = '//*[@id="page"]/div[1]/div[2]/div/div[1]/div[1]/h1') %>%
+    html_text()
+  
+  # Extracte the date
+  date = site1 %>% 
+    html_nodes(.,xpath="//*[@id='page']/div[1]/div[2]/div/div[1]/div[1]/div[1]/div/div[1]/div[1]/ul/li/div") %>% 
+    html_text(.) %>% as.Date(.,"%d %b %Y")
+  
+  # Extract the story
+  story = site1 %>% 
+    html_nodes(xpath  ='//*[@id="page"]/div[1]/div[2]/div/div[1]/div[1]/div[2]/p')%>%
+    html_text() %>% 
+    str_c(collapse=" ")
+  
+  # Extract the source
+  source = "BBC"
+
+  # Output as data frame and return
+  data.out = data.frame(headline,date,story, source)
+  return(data.out)
+}
+  
+urls1 <- c("https://www.bbc.com/news/business-47729803",
+           "https://www.bbc.com/news/business-47634103",
+           "https://www.bbc.com/news/business-47300313",
+           "https://www.bbc.com/news/business-47126114")
+
+output1 <- c()
+for(i in 1:length(urls1)){
+  Sys.sleep(runif(1,1,5))
+  draw <- bbc_scraper(urls1[i])  
+  output1 <- bind_rows(output1,draw)
+}
+
+str(output1)
+
+print(output1)
+```
+
+
+
+Let's now extract news about the same topic in New York Times and create a data frame to store the information. Since the scrapper I built for New York Times cannot apply for all its urls, I decided to grab information from one url at a time and then combined them in one data frame.
+
+
+```{r}
+url5 <- "https://www.nytimes.com/2018/03/08/business/china-vows-retaliation-if-trump-engages-in-trade-war.html"
+news5 <- read_html(url5)
+
+#extracting the headline
+headline5 = news5 %>% 
+  html_node(xpath = '//*[@id="link-2e6cebd3"]') %>%
+  html_text()
+headline5
+
+#extracting the date
+date5 = news5 %>% 
+  html_node(xpath = '//*[@id="story"]/header/div[4]/div/ul/li[1]/time') %>% 
+  html_text() 
+date5 = as.Date(date5,"%B %d, %Y")
+date5
+
+#extracting the story
+story5 <- news5 %>% 
+  html_nodes(xpath  ='//*[@id="story"]/section') %>% 
+  html_text() %>% 
+  str_c(collapse=" ")
+story5
+
+```
+
+
+
+```{r}
+url2 <- "https://www.nytimes.com/2018/04/05/world/asia/china-trade-war-trump-tariffs.html"
+news2 <- read_html(url2)
+
+#extracting the headline
+headline2 = news2 %>% 
+  html_node(xpath = '//*[@id="link-26ab31c5"]') %>%
+  html_text()
+headline2
+
+#extracting the date
+date2 = news2 %>% 
+  html_node(xpath = '//*[@id="story"]/header/div[4]/div/ul/li[1]/time') %>% 
+  html_text() 
+date2 = as.Date(date2,"%B %d, %Y")
+date2
+
+#extracting the story
+story2 <- news2 %>% 
+  html_nodes(xpath  ='//*[@id="story"]/section') %>% 
+  html_text() %>% 
+  str_c(collapse=" ")
+story2
+```
+
+```{r}
+url6 <- "https://www.nytimes.com/2018/03/22/opinion/trade-war-china-trump.html"
+news6 <- read_html(url6)
+
+#extracting the headline
+headline6 = news6 %>% 
+  html_node(xpath = '//*[@id="link-4963e3bb"]') %>%
+  html_text()
+headline6
+
+#extracting the date
+date6 = news6 %>% 
+  html_node(xpath = '//*[@id="story"]/header/div[3]/div[1]/ul/li[1]/time') %>% 
+  html_text() 
+date6 = as.Date(date6,"%B %d, %Y")
+date6
+
+#extracting the story
+story6 <- news6 %>% 
+  html_nodes(xpath  ='//*[@id="story"]/section/div') %>% 
+  html_text() %>% 
+  str_c(collapse=" ")
+story6
+```
+
+
+```{r}
+url7 <- "https://www.nytimes.com/2019/04/05/business/china-trade-trump-jobs-decoupling.html"
+news7 <- read_html(url7)
+
+#extracting the headline
+headline7 = news7 %>% 
+  html_node(xpath = '//*[@id="link-73b67f9c"]') %>%
+  html_text()
+headline7
+
+#extracting the date
+date7 = news7 %>% 
+  html_node(xpath = '//*[@id="story"]/header/div[4]/div[1]/ul/li[1]/time') %>% 
+  html_text() 
+date7 = as.Date(date7,"%B %d, %Y")
+date7
+
+#extracting the story
+story7 <- news7 %>% 
+  html_nodes(xpath  ='//*[@id="story"]/section/div/div') %>% 
+  html_text() %>% 
+  str_c(collapse=" ")
+story7
+```
+
+```{r}
+# Create a dataframe to store all the information from New York Times
+headline <- c(headline2, headline5, headline6, headline7)
+date <- c(date2, date5, date6, date7)
+story <- c(story2, story5, story6, story7)
+source <- c("New York Times", "New York Times", "New York Times", "New York Times")
+
+
+output2 <- data.frame(headline, date, story, source)
+
+print(output2)
+```
+
+Lastly, let's grab news from Forbes.
+
+```{r}
+#build the forbes scrapper
+forbes_scraper <- function(url){
+  # Download website   
+  site3 = read_html(url)
+  
+  # Extract headline
+  headline = site3 %>%
+    html_node(xpath = '//*[@id="article-container-0"]/div[2]/div[1]/article-header/div/h1') %>%
+    html_text()
+  
+  # Extracte the date
+  date = site3 %>% 
+    html_nodes(.,xpath='//*[@id="article-container-0"]/div[2]/div[1]/article-header/div/div[1]/metrics/span[2]/time') %>% 
+    html_text(.) %>% 
+    as.Date(date, format="%b %d, %Y")  
+ 
+  
+  # Extract the story
+  story = site3 %>% 
+    html_nodes(xpath  ='//*[@id="article-container-0"]/div[2]/div[1]/article-body-container/div/div/p') %>% 
+    html_text() %>% 
+    str_c(collapse=" ")
+  
+  # Extract the source
+  source = "Forbes"
+
+  # Output as data frame and return
+  data.out3 = data.frame(headline,date,story, source)
+  return(data.out3)
+}
+  
+urls3 <- c("https://www.forbes.com/sites/kenrapoza/2019/03/10/china-trade-war-update-does-anybody-know-whats-going-on/#7eadad077b33",
+           "https://www.forbes.com/sites/phillevy/2019/03/20/the-endless-china-trade-war/#1abfafd68586",
+           "https://www.forbes.com/sites/kenrapoza/2019/04/01/taiwan-just-became-a-huge-variable-in-china-trade-war/#4770697c5948",
+           "https://www.forbes.com/sites/kenrapoza/2019/04/01/trade-war-update-chinas-economy-refuses-to-roll-over-play-dead/#26d0ff78278f")
+
+output3 <- c()
+for(i in 1:length(urls3)){
+  Sys.sleep(runif(1,1,5))
+  draw <- forbes_scraper(urls3[i])  
+  output3 <- bind_rows(output3,draw)
+}
+
+str(output3)
+
+
+print(output3)
+```
+
+
+I am not sure why some of the outputs for the story are not showing in the knitted PDF, but all outputs are showing in Rstudio clouds correctly.
+
+
+2. Save the extracted data as a `.csv` to a the `Data/` folder. 
+
+```{r}
+# combine all three dataframe into one.
+data <- bind_rows(list(output1, output2, output3))
+
+print(data)
+```
+
+```{r}
+write_csv(data, path = "Data/data.csv")
+```
+
+I am not sure why some of the outputs for the story are not showing in the knitted PDF, but all outputs are showing in Rstudio clouds and the csv file.
+
+3. Convert the data into a tidy text format where the unit of analysis is the document("news story")-word. 
+
+```{r}
+text_data <- data %>% 
+  unnest_tokens(word,story)
+
+head(text_data)
+```
+
+4. Clean the text, removing stopwords, digits, and punctuation (if need be). If there are any special characters or other issues with the text, please clean those as well using regular expressions. 
+
+
+Remove stopwords and digits. 
+
+```{r}
+text_data <- 
+  text_data %>% 
+  anti_join(stop_words,by="word") %>% 
+  filter(!str_detect(word,"\\d")) %>% 
+  
+  # From the TM package (must install if you don't have)
+  mutate(word = tm::removePunctuation(word)) 
+  
+
+head(text_data)
+```
+
+
+5. Plot a graph containing the 10 most frequently used words by news source. Comment on the differences/similarities. Do the news sources generally use the same language to describe similar content or are there clear differences?
+
+Count term frequencies.
+
+```{r}
+text_data_freq <-
+  text_data %>% 
+  group_by(source) %>% 
+  count(word,sort=T) %>% 
+  ungroup()
+```
+
+Let's look at the top ten words by news source. 
+
+```{r,fig.align="center",fig.width=25,fig.height=10}
+text_data_freq %>% 
+  group_by(source) %>% 
+  top_n(10,n) %>% 
+  ggplot(aes(word,n)) +
+  geom_col() + 
+  coord_flip() +
+  facet_wrap(~source,scales = "free",ncol=3) +
+  theme(text = element_text(size=35))
+```
+
+From the three plots above, we can see that the news sources generally use the same language to describe the China-US war topic. They all mentioned "China", "tariffs","trump", "trade" very often. But there are also some differences: the BBC news foucs more in the "talks" and "deals" between China and the US; the Forbes also provides views on "Taiwan"s role in trade war; while the New York Times talks more about "american" and "Chinese" "companies" in the trade war.
+
+
+
+6. Merge on a sentiment classifier of your choosing from the `get_sentiment()` function. Examine the aggregate sentiment of each news outlet. Are there any noticiable differences in average sentiment across news outlets? 
+
+Let's examine the sentiment of the news.
+
+```{r}
+text_data_sent <- 
+  text_data %>% 
+  inner_join(get_sentiments("afinn"),by='word')
+
+head(text_data_sent)
+```
+
+```{r}
+text_data_sent %>% 
+  group_by(source) %>% 
+  summarize(ave_score = mean(score)) %>% 
+  ungroup 
+```
+
+From the results above, there isn't any noticiable differences in average sentiment across news outlets. The average scores for all three news sources are all negative and relatively similar (no larger than 0.04 difference).
+
+
+7. Run a topic model on the articles --- the number of topics ($k$) is up to you. Plot the top ten words for each topic. Assign meaning to each topic bin (if topics appear meaningless, try different values for $k$). Be sure to explain why you assigned labels you do for each topic bin.
+
+```{r}
+dtm <- 
+  text_data %>% 
+  mutate(id = str_glue("{source}")) %>% 
+  group_by(id) %>% 
+  count(word) %>% 
+  ungroup %>% 
+  cast_dtm(document = id,term = word,value = n) 
+
+dtm
+```
+
+Let's run a topic model with 2 possible topics.
+
+```{r}
+news_lda <- LDA(dtm,k=2)
+```
+
+
+```{r,fig.width=7,fig.height=4}
+# Extract the term to topic associations
+news_lda %>% 
+  tidy(metric="beta") %>% 
+  
+  # Convert topics metrics to proportions
+  group_by(topic) %>% 
+  mutate(prop = beta/sum(beta)) %>% 
+  
+  # Grab the top 10
+  top_n(10,prop) %>% 
+  ungroup %>% 
+  
+  # Rename topic label
+  mutate(topic = ifelse(topic==1,"Business Focus","Country Focus")) %>%
+  mutate(topic_label = str_glue("topic {topic}")) %>% 
+  
+  # Plot as word cloud
+  ggplot(aes(label=term,size=prop)) +
+  ggwordcloud::geom_text_wordcloud_area() + 
+  scale_size_area(max_size = 15) +
+  facet_wrap(~topic_label,scales="free",ncol=2) 
+```
+
+
+From the plot above, we can see that for topic 1, it focused on the American and Chinese companies in the trade war, which is more business focused; while for topic 2, it mentioned more on Taiwan, US and China's role in the trade war, which is more country or region focused.
+
+
+
+8. Examine to see if any of the selected news outlets are more associated with specific topics. Does this offer any insights into potential reporting biases? 
+
+
+```{r}
+source_topic_member <- tidy(news_lda,"gamma") %>% 
+  mutate(document, gamma)
+source_topic_member
+```
+
+
+```{r}
+source_topic_member %>% filter(document=="BBC")
+
+```
+```{r}
+source_topic_member %>% filter(document=="Forbes")
+
+```
+
+```{r}
+source_topic_member %>% filter(document=="New York Times")
+```
+
+We can see from above that BBC is relatively more associated with topic 2 which is the country focus; Forbes is highly accociated with the country focus; and New York Times is relatively associated with topic1 which is the business focus.
+
